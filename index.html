@@ -1,99 +1,53 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Real-System Miner</title>
-<style>
-body { font-family: monospace; background: #111; color: #0f0; }
-h1 { color: #0ff; }
-p { margin: 5px 0; }
-#stats { margin-top: 10px; }
-</style>
-</head>
-<body>
-
-<h1>Real-System Miner</h1>
-
-<div id="mining">
-<p>Generation: <span id="generation">0</span></p>
-<p>Current Input: <span id="currentInput">—</span></p>
-<p>Lowest Hash: <span id="lowestHash">—</span></p>
-</div>
-
-<div id="stats">
-<h2>System Stats</h2>
-<p>CPU Cores: <span id="cpuCores">—</span></p>
-<p>CPU Usage: <span id="cpuUsage">—</span></p>
-<p>RAM Used: <span id="ramUsed">—</span> MB</p>
-</div>
+<p>Generation: <span id="gen">0</span></p>
+<p>Current Input: <span id="input"></span></p>
+<p>Current Hash: <span id="hash"></span></p>
+<p>Lowest Hash: <span id="lowhash">—</span></p>
+<p>Lowest Input: <span id="lowinput">—</span></p>
 
 <script>
-/*********** Real System Info ***********/
-const cpuCores = navigator.hardwareConcurrency || 4;
-document.getElementById('cpuCores').textContent = cpuCores;
+let counter = 0;
+let chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+let lowestHash = null;
+let lowestInput = null;
+let running = true;
 
-function getRAMUsedMB() {
-    if (performance.memory) {
-        return performance.memory.usedJSHeapSize / 1048576;
+function toBaseN(num, chars) {
+    let base = chars.length;
+    let result = '';
+    do {
+        result = chars[num % base] + result;
+        num = Math.floor(num / base);
+    } while (num > 0);
+    return result;
+}
+
+async function sha256Hex(str) {
+    let encoder = new TextEncoder();
+    let data = encoder.encode(str);
+    let hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    let hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function runGen() {
+    while (running) {
+        let inputString = toBaseN(counter, chars);
+        counter++;
+
+        let hashHex = await sha256Hex(inputString);
+
+        if (lowestHash === null || hashHex < lowestHash) {
+            lowestHash = hashHex;
+            lowestInput = inputString;
+        }
+
+        document.getElementById('gen').textContent = counter;
+        document.getElementById('input').textContent = inputString;
+        document.getElementById('hash').textContent = hashHex;
+        document.getElementById('lowhash').textContent = lowestHash;
+        document.getElementById('lowinput').textContent = lowestInput;
     }
-    return 0;
 }
 
-/*********** Mining State ***********/
-let generation = 1;
-let counter = 1;
-let lowestHash = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-const genPerSecond = 10; // generations per second
-let lastTime = performance.now();
-let lastCpuTime = performance.now();
-let cpuStart = performance.now();
-
-/*********** Utilities ***********/
-function randomHex(len) {
-    let s = '';
-    for (let i = 0; i < len; i++) s += Math.floor(Math.random() * 16).toString(16);
-    return s;
-}
-
-/*********** Stats Update ***********/
-function updateStats(currentInput = '') {
-    // CPU usage approximation
-    const now = performance.now();
-    const elapsed = (now - cpuStart);
-    let cpuUsage = Math.min(100, elapsed / 1000); // rough estimation
-
-    const ramUsed = getRAMUsedMB();
-
-    document.getElementById('generation').textContent = Math.floor(generation);
-    document.getElementById('currentInput').textContent = currentInput;
-    document.getElementById('lowestHash').textContent = lowestHash;
-
-    document.getElementById('cpuUsage').textContent = cpuUsage.toFixed(1) + '%';
-    document.getElementById('ramUsed').textContent = Math.floor(ramUsed);
-}
-
-/*********** Mining Loop ***********/
-function mineStep() {
-    const now = performance.now();
-    const dt = (now - lastTime) / 1000;
-    lastTime = now;
-
-    // Increment generation and counter in real time
-    generation += genPerSecond * dt;
-    counter += Math.floor(genPerSecond * dt);
-    const currentInput = "input_" + counter;
-
-    // Simulate hash (cannot compute real BTC hash)
-    const newHash = randomHex(64);
-    if (newHash < lowestHash) lowestHash = newHash;
-
-    updateStats(currentInput);
-    requestAnimationFrame(mineStep);
-}
-
-/*********** Start Mining ***********/
-mineStep();
+runGen();
 </script>
-
-</body>
-</html>
