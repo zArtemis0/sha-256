@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MAXED OUT WebGPU SHA-256 Miner</title>
+<title>Auto-Ramp Maxed WebGPU SHA-256 Miner</title>
 <style>
 body { font-family: monospace; background: #111; color: #0f0; }
 h1 { color: #0ff; }
@@ -12,7 +12,7 @@ p { margin: 5px 0; }
 </head>
 <body>
 
-<h1>MAXED OUT WebGPU SHA-256 Miner</h1>
+<h1>Auto-Ramp Maxed WebGPU SHA-256 Miner</h1>
 
 <div id="mining">
 <p>Generation: <span id="generation">0</span></p>
@@ -59,10 +59,10 @@ function updateStats(currentInput=''){
     if(performance.memory && performance.memory.usedJSHeapSize>0) ramUsed=(performance.memory.usedJSHeapSize/1048576).toFixed(1);
     const power = (cpuUsage*0.7 + gpuUsage*2.0).toFixed(1);
 
-    document.getElementById('cpuUsage').textContent = cpuUsage.toFixed(1)+'%';
-    document.getElementById('gpuUsage').textContent = gpuUsage.toFixed(1)+'k h/s';
-    document.getElementById('ramUsed').textContent = ramUsed;
-    document.getElementById('power').textContent = power+' W';
+    document.getElementById('cpuUsage').textContent=cpuUsage.toFixed(1)+'%';
+    document.getElementById('gpuUsage').textContent=gpuUsage.toFixed(1)+'k h/s';
+    document.getElementById('ramUsed').textContent=ramUsed;
+    document.getElementById('power').textContent=power+' W';
     lastGen = generation;
     lastTime = now;
     document.getElementById('generation').textContent = generation;
@@ -76,20 +76,16 @@ async function initWebGPU(){
     const adapter = await navigator.gpu.requestAdapter();
     const device = await adapter.requestDevice();
 
-    // Full SHA-256 WGSL shader (simplified for browser GPU)
     const shaderModule = device.createShaderModule({
         code: `
 struct Out { hash: array<u32,8>; };
 @group(0) @binding(0) var<storage, read_write> outHash: array<Out>;
-
-fn rotr(x:u32, n:u32) -> u32 { return (x >> n) | (x << (32u - n)); }
-
+fn rotr(x:u32,n:u32) -> u32 { return (x >> n) | (x << (32u - n)); }
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let idx = gid.x;
     var h: array<u32,8>;
-    // simulate SHA-256 rounds for max GPU usage
-    for(var i:u32 = 0u; i<8u; i=i+1u){
+    for(var i:u32=0u;i<8u;i=i+1u){
         h[i] = idx*(i+1u);
         h[i] = h[i] ^ rotr(h[i], (i*7u + 13u)%32u);
         h[i] = h[i] + 123456789u;
@@ -98,8 +94,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }`
     });
 
-    const pipeline = device.createComputePipeline({ compute: { module: shaderModule, entryPoint: 'main' } });
-    const batchSize = 131072; // very large batch to max GPU
+    const pipeline = device.createComputePipeline({ compute: { module: shaderModule, entryPoint:'main' } });
+    let batchSize = 8192; // start small for safety
     const outBuffer = device.createBuffer({ size: batchSize*32, usage: GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC });
     const bindGroup = device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
@@ -111,6 +107,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 /*********** Mining Loop ***********/
 async function mineLoop(gpu){
+    // Ramp up batch size gradually to max GPU
+    if(gpu.batchSize < 131072) gpu.batchSize = Math.min(131072, Math.floor(gpu.batchSize*1.5));
+
     const encoder = gpu.device.createCommandEncoder();
     const pass = encoder.beginComputePass();
     pass.setPipeline(gpu.pipeline);
@@ -119,8 +118,8 @@ async function mineLoop(gpu){
     pass.end();
     gpu.device.queue.submit([encoder.finish()]);
 
-    // Track CPU-side lowest hash (for display)
-    for(let i=0; i<100; i++){
+    // CPU-side lowest hash tracking
+    for(let i=0; i<50; i++){
         const inputStr = counter.toString(36);
         counter++;
         const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputStr));
@@ -141,6 +140,7 @@ async function run(){
 }
 
 run();
+
 </script>
 </body>
 </html>
