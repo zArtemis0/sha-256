@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SHA-256 Random Hash Generator</title>
+<!-- Make sure the SHA-256 library loads from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/js-sha256@0.9.0/build/sha256.min.js"></script>
+<style>
+  body { font-family: Arial; text-align: center; margin-top: 50px; }
+  button { font-size: 1.2em; padding: 10px 20px; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<h1>SHA-256 Random Hash Generator</h1>
+<p>Press "Generate" to create a random input and compute its SHA-256 hash.</p>
+
+<p id="currentInput">Current Input: N/A</p>
+<p id="currentHash">Current Hash: N/A</p>
+<p id="minHash">Smallest Hash Found: N/A</p>
+
+<button id="generateBtn">Generate</button>
+
+<script>
+let minHash = null;
+let minInput = null;
+
+function generateRandom() {
+    // Generate a random string (length 8–12, letters + digits)
+    let length = 8 + Math.floor(Math.random() * 5);
+    let chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let input = '';
+    for (let i = 0; i < length; i++) {
+        input += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    // Compute SHA-256 hash
+    let hash = sha256(input);
+
+    // Update current input and hash
+    document.getElementById("currentInput").innerText = `Current Input: ${input}`;
+    document.getElementById("currentHash").innerText = `Current Hash: ${hash}`;
+
+    // Update smallest hash if necessary
+    if (minHash === null || hash < minHash) {
+        minHash = hash;
+        minInput = input;
+        document.getElementById("minHash").innerText = `Smallest Hash Found: ${minHash} (Input: ${minInput})`;
+    }
+}
+
+// Attach event listener to button after page loads
+document.getElementById("generateBtn").addEventListener("click", generateRandom);
+</script>
+
+</body>
+</html>
