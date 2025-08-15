@@ -1,57 +1,47 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>SHA-256 Random Hash Generator</title>
-<!-- Make sure the SHA-256 library loads from CDN -->
-<script src="https://cdn.jsdelivr.net/npm/js-sha256@0.9.0/build/sha256.min.js"></script>
-<style>
-  body { font-family: Arial; text-align: center; margin-top: 50px; }
-  button { font-size: 1.2em; padding: 10px 20px; margin-top: 20px; }
-</style>
-</head>
-<body>
-
-<h1>SHA-256 Random Hash Generator</h1>
-<p>Press "Generate" to create a random input and compute its SHA-256 hash.</p>
-
-<p id="currentInput">Current Input: N/A</p>
-<p id="currentHash">Current Hash: N/A</p>
-<p id="minHash">Smallest Hash Found: N/A</p>
-
-<button id="generateBtn">Generate</button>
+<button onclick="generate()">Generate</button>
+<p>Generation: <span id="gen">0</span></p>
+<p>Current Input: <span id="input"></span></p>
+<p>Current Hash: <span id="hash"></span></p>
+<p>Lowest Hash: <span id="lowhash">—</span></p>
+<p>Lowest Input: <span id="lowinput">—</span></p>
 
 <script>
-let minHash = null;
-let minInput = null;
+let counter = 0;
+let chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+let lowestHash = null;
+let lowestInput = null;
 
-function generateRandom() {
-    // Generate a random string (length 8–12, letters + digits)
-    let length = 8 + Math.floor(Math.random() * 5);
-    let chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let input = '';
-    for (let i = 0; i < length; i++) {
-        input += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-
-    // Compute SHA-256 hash
-    let hash = sha256(input);
-
-    // Update current input and hash
-    document.getElementById("currentInput").innerText = `Current Input: ${input}`;
-    document.getElementById("currentHash").innerText = `Current Hash: ${hash}`;
-
-    // Update smallest hash if necessary
-    if (minHash === null || hash < minHash) {
-        minHash = hash;
-        minInput = input;
-        document.getElementById("minHash").innerText = `Smallest Hash Found: ${minHash} (Input: ${minInput})`;
-    }
+function toBaseN(num, chars) {
+    let base = chars.length;
+    let result = '';
+    do {
+        result = chars[num % base] + result;
+        num = Math.floor(num / base);
+    } while (num > 0);
+    return result;
 }
 
-// Attach event listener to button after page loads
-document.getElementById("generateBtn").addEventListener("click", generateRandom);
-</script>
+async function generate() {
+    let inputString = toBaseN(counter, chars); // fully auto base-N counting
+    counter++;
 
-</body>
-</html>
+    let encoder = new TextEncoder();
+    let data = encoder.encode(inputString);
+    let hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    let hashArray = Array.from(new Uint8Array(hashBuffer));
+    let hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // Track lowest hash
+    if (lowestHash === null || hashHex < lowestHash) {
+        lowestHash = hashHex;
+        lowestInput = inputString;
+    }
+
+    // Update page
+    document.getElementById('gen').textContent = counter;
+    document.getElementById('input').textContent = inputString;
+    document.getElementById('hash').textContent = hashHex;
+    document.getElementById('lowhash').textContent = lowestHash;
+    document.getElementById('lowinput').textContent = lowestInput;
+}
+</script>
