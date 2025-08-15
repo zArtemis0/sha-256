@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Simulated Miner</title>
+<title>Safe Real-Time Miner</title>
 <style>
 body { font-family: monospace; background: #111; color: #0f0; }
 h1 { color: #0ff; }
@@ -12,7 +12,7 @@ p { margin: 5px 0; }
 </head>
 <body>
 
-<h1>Simulated Miner (Safe Start)</h1>
+<h1>Safe Real-Time Miner</h1>
 
 <div id="mining">
 <p>Generation: <span id="generation">0</span></p>
@@ -30,6 +30,7 @@ p { margin: 5px 0; }
 </div>
 
 <script>
+/*********** State ***********/
 let generation = 1;
 let lowestHash = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 let counter = 1;
@@ -40,43 +41,21 @@ let cpuUsage = 5;
 let gpuUsage = 1;
 let ramUsed = 512;
 
+const genPerSecond = 10; // generations per second
+
+/*********** Utilities ***********/
 function randomHex(len) {
     let s = '';
     for(let i=0;i<len;i++) s += Math.floor(Math.random()*16).toString(16);
     return s;
 }
 
-function updateStats() {
-    document.getElementById('generation').textContent = generation;
-    document.getElementById('currentInput').textContent = "input_" + counter;
+/*********** Stats Update ***********/
+function updateStats(currentInput=''){
+    document.getElementById('generation').textContent = Math.floor(generation);
+    document.getElementById('currentInput').textContent = currentInput;
     document.getElementById('lowestHash').textContent = lowestHash;
 
     document.getElementById('cpuUsage').textContent = cpuUsage.toFixed(1) + "%";
     document.getElementById('gpuUsage').textContent = gpuUsage.toFixed(1) + "k h/s";
-    document.getElementById('ramUsed').textContent = ramUsed;
-    document.getElementById('power').textContent = (cpuUsage*0.7 + gpuUsage*2.0).toFixed(1) + " W";
-}
-
-function mineStep() {
-    // Slowly ramp generation
-    generation++;
-    counter++;
-
-    // Simulate lowest hash
-    let newHash = randomHex(64);
-    if(newHash < lowestHash) lowestHash = newHash;
-
-    // Slowly ramp CPU/GPU usage
-    cpuUsage = Math.min(100, cpuUsage + 0.05);
-    gpuUsage = Math.min(100, gpuUsage + 0.1);
-    ramUsed = Math.min(16000, ramUsed + 1);
-
-    updateStats();
-    requestAnimationFrame(mineStep);
-}
-
-mineStep();
-</script>
-
-</body>
-</html>
+    document.getEle
