@@ -105,12 +105,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return { device, pipeline, bindGroup, outBuffer, batchSize };
 }
 
-/*********** Mining Loop ***********/
-async function mineLoop(gpu){
-    // Ramp batch size safely
-    if(gpu.batchSize < 131072) gpu.batchSize = Math.min(131072, Math.floor(gpu.batchSize*1.5));
+/*********** CPU-Side Mining Loop (fixed) ***********/
+function cpuMineStep(){
+    const inputStr = counter.toString(36);
+    crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputStr)).then(hashBuffer => {
+        const hashHex = toHex(new Uint8Array(hashBuffer));
+        counter++;
+        generation++;
+        if(!lowestHash || hashHex < lowestHash) lowestHash = hashHex;
+        updateStats(inputStr);
+        requestAnimationFrame(cpuMineStep);
+    });
+}
 
-    // Submit GPU work
+/*********** GPU Mining Loop ***********/
+async function gpuMineLoop(gpu){
+    if(gpu.batchSize < 131072) gpu.batchSize = Math.min(131072, Math.floor(gpu.batchSize*1.5));
     const encoder = gpu.device.createCommandEncoder();
     const pass = encoder.beginComputePass();
     pass.setPipeline(gpu.pipeline);
@@ -118,32 +128,17 @@ async function mineLoop(gpu){
     pass.dispatchWorkgroups(Math.ceil(gpu.batchSize/256));
     pass.end();
     gpu.device.queue.submit([encoder.finish()]);
-
-    // CPU-side single SHA-256 per frame for display
-    const inputStr = counter.toString(36);
-    counter++;
-    generation++;
-    crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputStr)).then(hashBuffer => {
-        const hashHex = toHex(hashBuffer);
-        if(!lowestHash || hashHex < lowestHash) lowestHash = hashHex;
-        updateStats(inputStr);
-    });
-
-    requestAnimationFrame(()=>mineLoop(gpu));
+    requestAnimationFrame(()=>gpuMineLoop(gpu));
 }
 
 /*********** Start Miner ***********/
 async function run(){
     const gpu = await initWebGPU();
-    if(!gpu) return;
-    mineLoop(gpu);
+    if(gpu) gpuMineLoop(gpu);
+    cpuMineStep(); // Start CPU-side hash immediately
 }
 
 run();
-
-</script>
-</body>
-</html>
 
 </script>
 </body>
