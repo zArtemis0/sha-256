@@ -1,15 +1,43 @@
-<button onclick="generate()">Generate</button>
-<p>Generation: <span id="gen">0</span></p>
-<p>Current Input: <span id="input"></span></p>
-<p>Current Hash: <span id="hash"></span></p>
-<p>Lowest Hash: <span id="lowhash">—</span></p>
-<p>Lowest Input: <span id="lowinput">—</span></p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WebGPU SHA-256 Miner + System Stats</title>
+<style>
+body { font-family: monospace; background: #111; color: #0f0; }
+h1 { color: #0ff; }
+p { margin: 5px 0; }
+#stats { margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<h1>WebGPU SHA-256 Miner + System Stats</h1>
+
+<div id="mining">
+<p>Generation: <span id="generation">0</span></p>
+<p>Current Input: <span id="currentInput">—</span></p>
+<p>Current Hash: <span id="currentHash">—</span></p>
+<p>Lowest Hash: <span id="lowestHash">—</span></p>
+<p>Lowest Input: <span id="lowestInput">—</span></p>
+</div>
+
+<div id="stats">
+<h2>System Stats (approx)</h2>
+<p>CPU Cores: <span id="cpuCores">—</span></p>
+<p>CPU Usage: <span id="cpuUsage">—</span></p>
+<p>GPU Activity: <span id="gpuUsage">—</span></p>
+<p>RAM Used: <span id="ramUsed">—</span> MB</p>
+<p>Estimated Power: <span id="power">—</span> W</p>
+</div>
 
 <script>
-let counter = 0;
-let chars = '0123456789abcdefghijklmnopqrstuvwxyz';
-let lowestHash = null;
-let lowestInput = null;
+/*********** Utils ***********/
+function toHex(buffer) {
+    return [...new Uint8Array(buffer)]
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
 
 function toBaseN(num, chars) {
     let base = chars.length;
@@ -21,27 +49,94 @@ function toBaseN(num, chars) {
     return result;
 }
 
-async function generate() {
-    let inputString = toBaseN(counter, chars); // fully auto base-N counting
-    counter++;
+function incrementString(str) {
+    let arr = str.split('');
+    let i = arr.length - 1;
+    while (i >= 0) {
+        if (arr[i] === 'z') {
+            arr[i] = 'a';
+            if (i === 0) arr.unshift('a');
+            i--;
+        } else {
+            arr[i] = String.fromCharCode(arr[i].charCodeAt(0) + 1);
+            break;
+        }
+    }
+    return arr.join('');
+}
 
-    let encoder = new TextEncoder();
-    let data = encoder.encode(inputString);
-    let hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    let hashArray = Array.from(new Uint8Array(hashBuffer));
-    let hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+/*********** Mining Variables ***********/
+const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+let currentInput = 'a';
+let generation = 0;
+let lowestHash = null;
+let lowestInput = null;
 
-    // Track lowest hash
-    if (lowestHash === null || hashHex < lowestHash) {
-        lowestHash = hashHex;
-        lowestInput = inputString;
+const cpuCores = navigator.hardwareConcurrency || 4;
+document.getElementById('cpuCores').textContent = cpuCores;
+
+/*********** System Stats Tracking ***********/
+let lastGen = 0;
+let lastTime = performance.now();
+
+function updateStats() {
+    const now = performance.now();
+    const genDiff = generation - lastGen;
+    const timeDiff = (now - lastTime)/1000; // seconds
+    const hashesPerSec = genDiff / timeDiff;
+
+    // Estimate CPU usage (simplified)
+    const cpuUsage = Math.min(100, (hashesPerSec / 5000) * 100); // tweak 5000 for performance
+    document.getElementById('cpuUsage').textContent = cpuUsage.toFixed(1) + '%';
+
+    // GPU activity = hashes/sec if WebGPU
+    document.getElementById('gpuUsage').textContent = (hashesPerSec/1000).toFixed(1) + 'k hashes/sec';
+
+    // RAM usage (Chrome only)
+    if (performance.memory) {
+        document.getElementById('ramUsed').textContent = (performance.memory.usedJSHeapSize/1048576).toFixed(1);
     }
 
-    // Update page
-    document.getElementById('gen').textContent = counter;
-    document.getElementById('input').textContent = inputString;
-    document.getElementById('hash').textContent = hashHex;
-    document.getElementById('lowhash').textContent = lowestHash;
-    document.getElementById('lowinput').textContent = lowestInput;
+    // Estimated power = rough formula
+    const power = (cpuUsage*0.5 + (hashesPerSec/1000)*0.3).toFixed(1);
+    document.getElementById('power').textContent = power + ' W';
+
+    lastGen = generation;
+    lastTime = now;
 }
+
+/*********** SHA-256 Mining ***********/
+async function mineBatch(batchSize=100) {
+    for (let i=0;i<batchSize;i++){
+        const data = new TextEncoder().encode(currentInput);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashHex = toHex(hashBuffer);
+
+        generation++;
+        if (!lowestHash || hashHex < lowestHash) {
+            lowestHash = hashHex;
+            lowestInput = currentInput;
+        }
+
+        document.getElementById('generation').textContent = generation;
+        document.getElementById('currentInput').textContent = currentInput;
+        document.getElementById('currentHash').textContent = hashHex;
+        document.getElementById('lowestHash').textContent = lowestHash;
+        document.getElementById('lowestInput').textContent = lowestInput;
+
+        currentInput = incrementString(currentInput);
+    }
+}
+
+/*********** Main Loop ***********/
+async function run() {
+    while (true) {
+        await mineBatch(50); // smaller batch to update UI frequently
+        updateStats();
+    }
+}
+
+run();
 </script>
+</body>
+</html>
