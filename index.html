@@ -58,4 +58,41 @@ function updateStats(currentInput=''){
 
     document.getElementById('cpuUsage').textContent = cpuUsage.toFixed(1) + "%";
     document.getElementById('gpuUsage').textContent = gpuUsage.toFixed(1) + "k h/s";
-    document.getEle
+    document.getElementById('ramUsed').textContent = Math.floor(ramUsed);
+    document.getElementById('power').textContent = (cpuUsage*0.7 + gpuUsage*2.0).toFixed(1) + " W";
+}
+
+/*********** Mining Loop ***********/
+let lastTime = performance.now();
+
+function mineStep() {
+    const now = performance.now();
+    const dt = (now - lastTime)/1000; // seconds
+    lastTime = now;
+
+    // Increment generation and counter based on real time
+    generation += genPerSecond * dt;
+    counter += Math.floor(genPerSecond * dt);
+
+    // Simulate current input
+    const currentInput = "input_" + counter;
+
+    // Random lowest hash simulation
+    let newHash = randomHex(64);
+    if(newHash < lowestHash) lowestHash = newHash;
+
+    // Slowly ramp CPU/GPU/RAM
+    cpuUsage = Math.min(100, cpuUsage + 5 * dt);
+    gpuUsage = Math.min(100, gpuUsage + 10 * dt);
+    ramUsed = Math.min(16000, ramUsed + 50 * dt);
+
+    updateStats(currentInput);
+    requestAnimationFrame(mineStep);
+}
+
+/*********** Start Mining ***********/
+mineStep();
+</script>
+
+</body>
+</html>
