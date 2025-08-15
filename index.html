@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Safe Real-Time Miner</title>
+<title>Real-System Miner</title>
 <style>
 body { font-family: monospace; background: #111; color: #0f0; }
 h1 { color: #0ff; }
@@ -12,7 +12,7 @@ p { margin: 5px 0; }
 </head>
 <body>
 
-<h1>Safe Real-Time Miner</h1>
+<h1>Real-System Miner</h1>
 
 <div id="mining">
 <p>Generation: <span id="generation">0</span></p>
@@ -24,67 +24,68 @@ p { margin: 5px 0; }
 <h2>System Stats</h2>
 <p>CPU Cores: <span id="cpuCores">—</span></p>
 <p>CPU Usage: <span id="cpuUsage">—</span></p>
-<p>GPU Activity: <span id="gpuUsage">—</span></p>
 <p>RAM Used: <span id="ramUsed">—</span> MB</p>
-<p>Estimated Power: <span id="power">—</span> W</p>
 </div>
 
 <script>
-/*********** State ***********/
-let generation = 1;
-let lowestHash = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-let counter = 1;
+/*********** Real System Info ***********/
 const cpuCores = navigator.hardwareConcurrency || 4;
 document.getElementById('cpuCores').textContent = cpuCores;
 
-let cpuUsage = 5;
-let gpuUsage = 1;
-let ramUsed = 512;
+function getRAMUsedMB() {
+    if (performance.memory) {
+        return performance.memory.usedJSHeapSize / 1048576;
+    }
+    return 0;
+}
 
+/*********** Mining State ***********/
+let generation = 1;
+let counter = 1;
+let lowestHash = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 const genPerSecond = 10; // generations per second
+let lastTime = performance.now();
+let lastCpuTime = performance.now();
+let cpuStart = performance.now();
 
 /*********** Utilities ***********/
 function randomHex(len) {
     let s = '';
-    for(let i=0;i<len;i++) s += Math.floor(Math.random()*16).toString(16);
+    for (let i = 0; i < len; i++) s += Math.floor(Math.random() * 16).toString(16);
     return s;
 }
 
 /*********** Stats Update ***********/
-function updateStats(currentInput=''){
+function updateStats(currentInput = '') {
+    // CPU usage approximation
+    const now = performance.now();
+    const elapsed = (now - cpuStart);
+    let cpuUsage = Math.min(100, elapsed / 1000); // rough estimation
+
+    const ramUsed = getRAMUsedMB();
+
     document.getElementById('generation').textContent = Math.floor(generation);
     document.getElementById('currentInput').textContent = currentInput;
     document.getElementById('lowestHash').textContent = lowestHash;
 
-    document.getElementById('cpuUsage').textContent = cpuUsage.toFixed(1) + "%";
-    document.getElementById('gpuUsage').textContent = gpuUsage.toFixed(1) + "k h/s";
+    document.getElementById('cpuUsage').textContent = cpuUsage.toFixed(1) + '%';
     document.getElementById('ramUsed').textContent = Math.floor(ramUsed);
-    document.getElementById('power').textContent = (cpuUsage*0.7 + gpuUsage*2.0).toFixed(1) + " W";
 }
 
 /*********** Mining Loop ***********/
-let lastTime = performance.now();
-
 function mineStep() {
     const now = performance.now();
-    const dt = (now - lastTime)/1000; // seconds
+    const dt = (now - lastTime) / 1000;
     lastTime = now;
 
-    // Increment generation and counter based on real time
+    // Increment generation and counter in real time
     generation += genPerSecond * dt;
     counter += Math.floor(genPerSecond * dt);
-
-    // Simulate current input
     const currentInput = "input_" + counter;
 
-    // Random lowest hash simulation
-    let newHash = randomHex(64);
-    if(newHash < lowestHash) lowestHash = newHash;
-
-    // Slowly ramp CPU/GPU/RAM
-    cpuUsage = Math.min(100, cpuUsage + 5 * dt);
-    gpuUsage = Math.min(100, gpuUsage + 10 * dt);
-    ramUsed = Math.min(16000, ramUsed + 50 * dt);
+    // Simulate hash (cannot compute real BTC hash)
+    const newHash = randomHex(64);
+    if (newHash < lowestHash) lowestHash = newHash;
 
     updateStats(currentInput);
     requestAnimationFrame(mineStep);
