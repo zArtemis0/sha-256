@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Auto-Ramp Maxed WebGPU SHA-256 Miner</title>
+<title>Working WebGPU SHA-256 Miner</title>
 <style>
 body { font-family: monospace; background: #111; color: #0f0; }
 h1 { color: #0ff; }
@@ -12,7 +12,7 @@ p { margin: 5px 0; }
 </head>
 <body>
 
-<h1>Auto-Ramp Maxed WebGPU SHA-256 Miner</h1>
+<h1>WebGPU SHA-256 Miner (Auto Start)</h1>
 
 <div id="mining">
 <p>Generation: <span id="generation">0</span></p>
@@ -70,7 +70,7 @@ function updateStats(currentInput=''){
     document.getElementById('lowestHash').textContent = lowestHash;
 }
 
-/*********** WebGPU SHA-256 Shader ***********/
+/*********** WebGPU Initialization ***********/
 async function initWebGPU(){
     if(!navigator.gpu){ alert("WebGPU not supported"); return null; }
     const adapter = await navigator.gpu.requestAdapter();
@@ -95,7 +95,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     });
 
     const pipeline = device.createComputePipeline({ compute: { module: shaderModule, entryPoint:'main' } });
-    let batchSize = 8192; // start small for safety
+    let batchSize = 8192; // start small
     const outBuffer = device.createBuffer({ size: batchSize*32, usage: GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC });
     const bindGroup = device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
@@ -107,9 +107,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 /*********** Mining Loop ***********/
 async function mineLoop(gpu){
-    // Ramp up batch size gradually to max GPU
+    // Ramp batch size safely
     if(gpu.batchSize < 131072) gpu.batchSize = Math.min(131072, Math.floor(gpu.batchSize*1.5));
 
+    // Submit GPU work
     const encoder = gpu.device.createCommandEncoder();
     const pass = encoder.beginComputePass();
     pass.setPipeline(gpu.pipeline);
@@ -118,17 +119,16 @@ async function mineLoop(gpu){
     pass.end();
     gpu.device.queue.submit([encoder.finish()]);
 
-    // CPU-side lowest hash tracking
-    for(let i=0; i<50; i++){
-        const inputStr = counter.toString(36);
-        counter++;
-        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputStr));
+    // CPU-side single SHA-256 per frame for display
+    const inputStr = counter.toString(36);
+    counter++;
+    generation++;
+    crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputStr)).then(hashBuffer => {
         const hashHex = toHex(hashBuffer);
-        generation++;
         if(!lowestHash || hashHex < lowestHash) lowestHash = hashHex;
-    }
+        updateStats(inputStr);
+    });
 
-    updateStats(counter.toString(36));
     requestAnimationFrame(()=>mineLoop(gpu));
 }
 
@@ -140,6 +140,10 @@ async function run(){
 }
 
 run();
+
+</script>
+</body>
+</html>
 
 </script>
 </body>
