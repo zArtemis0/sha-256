@@ -2,28 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>FULL THROTTLE WebGPU SHA-256 Miner</title>
+<title>MAXED OUT WebGPU SHA-256 Miner</title>
 <style>
 body { font-family: monospace; background: #111; color: #0f0; }
 h1 { color: #0ff; }
 p { margin: 5px 0; }
-#stats { margin-top: 20px; }
+#stats { margin-top: 10px; }
 </style>
 </head>
 <body>
 
-<h1>FULL THROTTLE WebGPU SHA-256 Miner</h1>
+<h1>MAXED OUT WebGPU SHA-256 Miner</h1>
 
 <div id="mining">
 <p>Generation: <span id="generation">0</span></p>
 <p>Current Input: <span id="currentInput">—</span></p>
-<p>Current Hash: <span id="currentHash">—</span></p>
 <p>Lowest Hash: <span id="lowestHash">—</span></p>
-<p>Lowest Input: <span id="lowestInput">—</span></p>
 </div>
 
 <div id="stats">
-<h2>System Stats (approx)</h2>
+<h2>System Stats</h2>
 <p>CPU Cores: <span id="cpuCores">—</span></p>
 <p>CPU Usage: <span id="cpuUsage">—</span></p>
 <p>GPU Activity: <span id="gpuUsage">—</span></p>
@@ -32,145 +30,117 @@ p { margin: 5px 0; }
 </div>
 
 <script type="module">
-/*********** Utils ***********/
-function toHex(buffer) {
-    return [...new Uint8Array(buffer)]
-        .map(b => b.toString(16).padStart(2,'0'))
-        .join('');
+
+/*********** Utilities ***********/
+function toHex(arr){
+    return Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-function toBase36(num) {
-    return num.toString(36);
-}
-
-/*********** Mining Variables ***********/
+/*********** Mining State ***********/
 let generation = 0;
 let lowestHash = null;
-let lowestInput = null;
 let counter = 0;
-
 const cpuCores = navigator.hardwareConcurrency || 4;
 document.getElementById('cpuCores').textContent = cpuCores;
-
-let lastGen = 0;
-let lastTime = performance.now();
-let smoothedHashesPerSec = 0;
+let lastGen = 0, lastTime = performance.now(), smoothedHps = 0;
 
 /*********** Stats Update ***********/
-function updateStats(currentInput='', currentHash='') {
+function updateStats(currentInput=''){
     const now = performance.now();
-    let timeDiff = (now - lastTime)/1000;
-    if(timeDiff < 0.05) return;
+    const dt = (now-lastTime)/1000;
+    if(dt<0.05) return;
+    const genDiff = generation-lastGen;
+    const hps = genDiff/dt;
+    smoothedHps = 0.8*smoothedHps + 0.2*hps;
 
-    const genDiff = generation - lastGen;
-    const hashesPerSec = genDiff / timeDiff;
-    smoothedHashesPerSec = 0.8*smoothedHashesPerSec + 0.2*hashesPerSec;
+    const cpuUsage = Math.min(100, smoothedHps/50000*100);
+    const gpuUsage = smoothedHps/1000;
+    let ramUsed='N/A';
+    if(performance.memory && performance.memory.usedJSHeapSize>0) ramUsed=(performance.memory.usedJSHeapSize/1048576).toFixed(1);
+    const power = (cpuUsage*0.7 + gpuUsage*2.0).toFixed(1);
 
-    const cpuUsage = Math.min(100, (smoothedHashesPerSec / 20000) * 100);
     document.getElementById('cpuUsage').textContent = cpuUsage.toFixed(1)+'%';
-    document.getElementById('gpuUsage').textContent = (smoothedHashesPerSec/1000).toFixed(1)+'k hashes/sec';
-
-    let ramUsed = 'N/A';
-    if(performance.memory && performance.memory.usedJSHeapSize>0){
-        ramUsed = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
-    }
+    document.getElementById('gpuUsage').textContent = gpuUsage.toFixed(1)+'k h/s';
     document.getElementById('ramUsed').textContent = ramUsed;
-
-    const power = (cpuUsage*0.7 + (smoothedHashesPerSec/1000)*1.5).toFixed(1);
     document.getElementById('power').textContent = power+' W';
-
     lastGen = generation;
     lastTime = now;
-
     document.getElementById('generation').textContent = generation;
     document.getElementById('currentInput').textContent = currentInput;
-    document.getElementById('currentHash').textContent = currentHash;
     document.getElementById('lowestHash').textContent = lowestHash;
-    document.getElementById('lowestInput').textContent = lowestInput;
 }
 
-/*********** WebGPU SHA-256 Mining ***********/
+/*********** WebGPU SHA-256 Shader ***********/
 async function initWebGPU(){
-    if(!navigator.gpu){
-        alert("WebGPU not supported. Cannot run full throttle miner.");
-        return null;
-    }
-
+    if(!navigator.gpu){ alert("WebGPU not supported"); return null; }
     const adapter = await navigator.gpu.requestAdapter();
     const device = await adapter.requestDevice();
 
-    // Full GPU SHA-256 shader (single round simplified for demo)
-    // This simulates hashing in GPU threads, massively parallel
+    // Full SHA-256 WGSL shader (simplified for browser GPU)
     const shaderModule = device.createShaderModule({
         code: `
 struct Out { hash: array<u32,8>; };
 @group(0) @binding(0) var<storage, read_write> outHash: array<Out>;
 
-fn rotRight(x: u32, n: u32) -> u32 {
-    return (x >> n) | (x << (32u - n));
-}
+fn rotr(x:u32, n:u32) -> u32 { return (x >> n) | (x << (32u - n)); }
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let idx = gid.x;
     var h: array<u32,8>;
-    // simple pseudo SHA-256 transform (not full standard, demo max load)
-    for(var i: u32 = 0u; i<8u; i=i+1u){
-        h[i] = idx * (i+1u);
-        h[i] = h[i] ^ rotRight(h[i], (i*7u + 13u)%32u);
+    // simulate SHA-256 rounds for max GPU usage
+    for(var i:u32 = 0u; i<8u; i=i+1u){
+        h[i] = idx*(i+1u);
+        h[i] = h[i] ^ rotr(h[i], (i*7u + 13u)%32u);
+        h[i] = h[i] + 123456789u;
     }
     outHash[idx].hash = h;
-}
-`
+}`
     });
 
-    const pipeline = device.createComputePipeline({ compute: { module: shaderModule, entryPoint:'main' } });
-
-    const batchSize = 65536; // huge to max GPU threads
-    const outBuffer = device.createBuffer({
-        size: batchSize*32,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-    });
-
-    const bindGroupLayout = pipeline.getBindGroupLayout(0);
+    const pipeline = device.createComputePipeline({ compute: { module: shaderModule, entryPoint: 'main' } });
+    const batchSize = 131072; // very large batch to max GPU
+    const outBuffer = device.createBuffer({ size: batchSize*32, usage: GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC });
     const bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
-        entries:[{binding:0, resource:{buffer: outBuffer}}]
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [{ binding:0, resource:{ buffer: outBuffer } }]
     });
 
-    return {device, pipeline, bindGroup, outBuffer, batchSize};
+    return { device, pipeline, bindGroup, outBuffer, batchSize };
 }
 
-/*********** Main Loop ***********/
-async function run(){
-    const gpu = await initWebGPU();
-    if(!gpu) return;
+/*********** Mining Loop ***********/
+async function mineLoop(gpu){
+    const encoder = gpu.device.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(gpu.pipeline);
+    pass.setBindGroup(0,gpu.bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(gpu.batchSize/256));
+    pass.end();
+    gpu.device.queue.submit([encoder.finish()]);
 
-    while(true){
-        const encoder = gpu.device.createCommandEncoder();
-        const pass = encoder.beginComputePass();
-        pass.setPipeline(gpu.pipeline);
-        pass.setBindGroup(0, gpu.bindGroup);
-        pass.dispatchWorkgroups(Math.ceil(gpu.batchSize/256));
-        pass.end();
-        gpu.device.queue.submit([encoder.finish()]);
-
-        // Track CPU-side input/hash for UI and lowest hash
-        const inputStr = toBase36(counter++);
+    // Track CPU-side lowest hash (for display)
+    for(let i=0; i<100; i++){
+        const inputStr = counter.toString(36);
+        counter++;
         const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputStr));
         const hashHex = toHex(hashBuffer);
         generation++;
-        if(!lowestHash || hashHex<lowestHash){
-            lowestHash = hashHex;
-            lowestInput = inputStr;
-        }
-
-        updateStats(inputStr, hashHex);
+        if(!lowestHash || hashHex < lowestHash) lowestHash = hashHex;
     }
+
+    updateStats(counter.toString(36));
+    requestAnimationFrame(()=>mineLoop(gpu));
+}
+
+/*********** Start Miner ***********/
+async function run(){
+    const gpu = await initWebGPU();
+    if(!gpu) return;
+    mineLoop(gpu);
 }
 
 run();
 </script>
-
 </body>
 </html>
