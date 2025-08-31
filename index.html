@@ -1,108 +1,100 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Mining Dashboard</title>
+  <title>Real SHA-256 Miner</title>
   <style>
-    body {
-      background: #0a0f1c;
-      color: #e0e6f0;
-      font-family: Consolas, monospace;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-    }
-    h1 {
-      color: #4db8ff;
-    }
-    .box {
-      background: #111a2e;
-      padding: 15px 20px;
-      margin: 10px;
-      border-radius: 8px;
-      width: 420px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
-    }
-    .label {
-      color: #6ca0dc;
-    }
-    .value {
-      color: #ffffff;
-    }
-    #hashrate {
-      font-weight: bold;
-      font-size: 1.2em;
-      color: #4db8ff;
-    }
+    body { background:#0d1117; color:#c9d1d9; font-family:monospace; }
+    h1 { color:#58a6ff; }
+    button { background:#21262d; border:1px solid #30363d; color:#c9d1d9; padding:6px 12px; margin:5px; cursor:pointer; }
+    button:hover { background:#30363d; }
+    #hps { margin-top:5px; color:#4fd1ff; }
   </style>
 </head>
 <body>
-  <h1>Mining Dashboard</h1>
+  <h1>Real-System Miner</h1>
+  <div id="gen">Generation: 0</div>
+  <div id="input">Current Input: —</div>
+  <div id="hash">Lowest Hash: —</div>
+  <div id="hps">Hashes/sec: —</div>
+  
+  <button onclick="startMiner()">Start</button>
+  <button onclick="stopMiner()">Stop</button>
 
-  <div class="box">
-    <div><span class="label">Generation:</span> <span class="value" id="gen">0</span></div>
-    <div><span class="label">Current Input:</span> <span class="value" id="input">—</span></div>
-    <div><span class="label">Current Hash:</span> <span class="value" id="hash">—</span></div>
-    <div><span class="label">Lowest Hash:</span> <span class="value" id="lowest">—</span></div>
-  </div>
+<script>
+// --- Random hex generator ---
+function cryptoRandomHex(len) {
+  const arr = new Uint8Array(len / 2);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+}
 
-  <div class="box">
-    <div><span class="label">Hashrate:</span> <span id="hashrate">— H/s</span></div>
-  </div>
+// --- Fake but realistic Bitcoin-like block header ---
+function fakeBlockHeader(counter) {
+  const version = "20000000"; // version
+  const prevHash = cryptoRandomHex(64); // prev block hash
+  const merkleRoot = cryptoRandomHex(64); // merkle root
+  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8,"0");
+  const bits = "1d00ffff"; // difficulty (testnet style)
+  const nonce = counter.toString(16).padStart(8,"0"); // increments
+  return version + prevHash + merkleRoot + timestamp + bits + nonce;
+}
 
-  <script>
-    // Generate a random hex input
-    function randomInput(len = 12) {
-      const chars = "abcdef0123456789";
-      let str = "";
-      for (let i = 0; i < len; i++) {
-        str += chars[Math.floor(Math.random() * chars.length)];
-      }
-      return str;
+let running = false;
+let generation = 0;
+let lowestHash = null;
+let counter = 0;
+let loop;
+let hashCount = 0;
+let lastTime = performance.now();
+
+async function sha256hex(str) {
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+async function mineBatch() {
+  const batchSize = 200;
+  for (let i=0; i<batchSize; i++) {
+    const input = fakeBlockHeader(counter++);
+    const hash = await sha256hex(input);
+
+    if (!lowestHash || hash < lowestHash) {
+      lowestHash = hash;
+      document.getElementById("hash").innerText = "Lowest Hash: " + lowestHash;
+      document.getElementById("input").innerText = "Current Input: " + input;
     }
+    generation++;
+    hashCount++;
+  }
 
-    // SHA-256 hashing
-    async function sha256(msg) {
-      const data = new TextEncoder().encode(msg);
-      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-      return Array.from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, "0"))
-        .join("");
-    }
+  document.getElementById("gen").innerText = "Generation: " + generation;
 
-    let generation = 0;
-    let lowestHash = null;
-    let lastUpdate = performance.now();
-    let hashes = 0;
+  // Update hashes/sec every second
+  const now = performance.now();
+  if (now - lastTime >= 1000) {
+    document.getElementById("hps").innerText = "Hashes/sec: " + hashCount.toLocaleString();
+    hashCount = 0;
+    lastTime = now;
+  }
 
-    async function mine() {
-      generation++;
-      document.getElementById("gen").textContent = generation;
+  if (running) {
+    loop = requestAnimationFrame(mineBatch);
+  }
+}
 
-      const input = randomInput();
-      document.getElementById("input").textContent = input;
+function startMiner() {
+  if (!running) {
+    running = true;
+    loop = requestAnimationFrame(mineBatch);
+  }
+}
 
-      const hash = await sha256(input);
-      document.getElementById("hash").textContent = hash;
-
-      if (!lowestHash || hash < lowestHash) {
-        lowestHash = hash;
-        document.getElementById("lowest").textContent = lowestHash;
-      }
-
-      hashes++;
-      let now = performance.now();
-      if (now - lastUpdate >= 1000) {
-        document.getElementById("hashrate").textContent = hashes + " H/s";
-        hashes = 0;
-        lastUpdate = now;
-      }
-
-      setTimeout(mine, 50); // keep mining
-    }
-
-    mine();
-  </script>
+function stopMiner() {
+  running = false;
+  cancelAnimationFrame(loop);
+}
+</script>
 </body>
 </html>
