@@ -2,20 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Real SHA-256 Miner (Local)</title>
-  <style>
-    body { font-family: monospace; background: #111; color: #0f0; padding: 20px; }
-    h1 { color: #0ff; }
-    .stat { margin: 5px 0; }
-    .hash { word-wrap: break-word; }
-  </style>
+  <title>Real-System Miner</title>
 </head>
 <body>
-  <h1>Real SHA-256 Miner</h1>
-  <div class="stat">Generation: <span id="gen">0</span></div>
-  <div class="stat">Current Input: <span id="input">—</span></div>
-  <div class="stat">Current Hash: <span id="hash">—</span></div>
-  <div class="stat">Lowest Hash: <span id="lowest">—</span></div>
+  <h1>Real-System Miner</h1>
+  <p>Generation: <span id="gen">0</span></p>
+  <p>Current Input: <span id="input">—</span></p>
+  <p>Current Hash: <span id="hash">—</span></p>
+  <p>Lowest Hash: <span id="lowest">—</span></p>
+  <p>Lowest From Input: <span id="lowestInput">—</span></p>
 
   <script>
     async function sha256(message) {
@@ -32,11 +27,11 @@
     async function mineStep() {
       generation++;
 
-      // Use actual input (random string instead of "input_###")
+      // Actual input (random string per generation)
       const input = Math.random().toString(36).substring(2, 10) + "_" + generation;
       const hash = await sha256(input);
 
-      // Update lowest
+      // Update lowest hash tracker
       if (!lowestHash || hash < lowestHash) {
         lowestHash = hash;
         lowestInput = input;
@@ -46,10 +41,11 @@
       document.getElementById("gen").textContent = generation;
       document.getElementById("input").textContent = input;
       document.getElementById("hash").textContent = hash;
-      document.getElementById("lowest").textContent = lowestHash + " (from: " + lowestInput + ")";
+      document.getElementById("lowest").textContent = lowestHash;
+      document.getElementById("lowestInput").textContent = lowestInput;
 
-      // Keep mining
-      setTimeout(mineStep, 10); // adjust speed here
+      // Keep looping
+      setTimeout(mineStep, 10); 
     }
 
     mineStep();
