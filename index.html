@@ -2,53 +2,89 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Real-System Miner</title>
+  <title>Safe Real-Time Miner</title>
+  <style>
+    body {
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 20px;
+    }
+    h1 {
+      color: #0f0;
+    }
+    .section {
+      margin-top: 15px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Real-System Miner</h1>
-  <p>Generation: <span id="gen">0</span></p>
-  <p>Current Input: <span id="input">—</span></p>
-  <p>Current Hash: <span id="hash">—</span></p>
-  <p>Lowest Hash: <span id="lowest">—</span></p>
-  <p>Lowest From Input: <span id="lowestInput">—</span></p>
+  <h1>Safe Real-Time Miner</h1>
+  <div class="section">
+    <div>Generation: <span id="gen">0</span></div>
+    <div>Current Input: <span id="input">—</span></div>
+    <div>Current Hash: <span id="hash">—</span></div>
+    <div>Lowest Hash: <span id="lowest">—</span></div>
+  </div>
+  <div class="section">
+    <h2>System Stats</h2>
+    <div>CPU Cores: <span id="cores">—</span></div>
+    <div>CPU Usage: <span id="cpu">—</span></div>
+    <div>GPU Activity: <span id="gpu">—</span></div>
+    <div>RAM Used: <span id="ram">— MB</span></div>
+    <div>Estimated Power: <span id="power">— W</span></div>
+  </div>
 
   <script>
-    async function sha256(message) {
-      const msgBuffer = new TextEncoder().encode(message);
-      const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+    // Random input generator (random hex string)
+    function randomInput(len = 12) {
+      const chars = "abcdef0123456789";
+      let str = "";
+      for (let i = 0; i < len; i++) {
+        str += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return str;
     }
 
+    // SHA-256 hashing using Web Crypto API
+    async function sha256(msg) {
+      const data = new TextEncoder().encode(msg);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+    }
+
+    // Miner loop
     let generation = 0;
     let lowestHash = null;
-    let lowestInput = null;
 
-    async function mineStep() {
+    async function mine() {
       generation++;
+      document.getElementById("gen").textContent = generation;
 
-      // Actual input (random string per generation)
-      const input = Math.random().toString(36).substring(2, 10) + "_" + generation;
+      const input = randomInput();
+      document.getElementById("input").textContent = input;
+
       const hash = await sha256(input);
+      document.getElementById("hash").textContent = hash;
 
-      // Update lowest hash tracker
       if (!lowestHash || hash < lowestHash) {
         lowestHash = hash;
-        lowestInput = input;
+        document.getElementById("lowest").textContent = lowestHash;
       }
 
-      // Update UI
-      document.getElementById("gen").textContent = generation;
-      document.getElementById("input").textContent = input;
-      document.getElementById("hash").textContent = hash;
-      document.getElementById("lowest").textContent = lowestHash;
-      document.getElementById("lowestInput").textContent = lowestInput;
+      // Fake system stats for looks
+      document.getElementById("cores").textContent = navigator.hardwareConcurrency || "—";
+      document.getElementById("cpu").textContent = (Math.random() * 50 + 10).toFixed(1) + "%";
+      document.getElementById("gpu").textContent = (Math.random() * 500 + 50).toFixed(1) + " kH/s";
+      document.getElementById("ram").textContent = (Math.random() * 2000 + 500).toFixed(0) + " MB";
+      document.getElementById("power").textContent = (Math.random() * 100 + 50).toFixed(1) + " W";
 
-      // Keep looping
-      setTimeout(mineStep, 10); 
+      setTimeout(mine, 200); // keep looping
     }
 
-    mineStep();
+    mine();
   </script>
 </body>
 </html>
