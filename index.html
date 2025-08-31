@@ -1,100 +1,182 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Real SHA-256 Miner</title>
-  <style>
-    body { background:#0d1117; color:#c9d1d9; font-family:monospace; }
-    h1 { color:#58a6ff; }
-    button { background:#21262d; border:1px solid #30363d; color:#c9d1d9; padding:6px 12px; margin:5px; cursor:pointer; }
-    button:hover { background:#30363d; }
-    #hps { margin-top:5px; color:#4fd1ff; }
-  </style>
+<meta charset="UTF-8" />
+<title>Real SHA-256 Miner (Browser)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+         background:#0b0b0b; color:#e6ffe6; margin:0; padding:24px; }
+  h1 { margin:0 0 16px; color:#7fffd4; }
+  .grid { display:grid; gap:12px; grid-template-columns: 1fr 1fr; }
+  .card { background:#111; border:1px solid #1f1f1f; border-radius:12px; padding:14px; }
+  .row { display:flex; justify-content:space-between; gap:12px; margin:6px 0; }
+  .mono { font-family: inherit; word-break: break-all; }
+  label { font-size: 14px; opacity:.9 }
+  input[type="number"] { width:110px; padding:6px 8px; border-radius:8px; border:1px solid #333; background:#0e0e0e; color:#e6ffe6; }
+  button { padding:10px 14px; border-radius:10px; border:1px solid #2a2a2a; background:#0e1310; color:#b9ffd1; cursor:pointer; }
+  button:hover { background:#0f1a15; }
+  .muted { opacity:.75 }
+  .ok { color:#a9ffb6 }
+  .warn { color:#ffd27f }
+  .err { color:#ff9f9f }
+  .big { font-size: 18px; }
+</style>
 </head>
 <body>
-  <h1>Real-System Miner</h1>
-  <div id="gen">Generation: 0</div>
-  <div id="input">Current Input: —</div>
-  <div id="hash">Lowest Hash: —</div>
-  <div id="hps">Hashes/sec: —</div>
-  
-  <button onclick="startMiner()">Start</button>
-  <button onclick="stopMiner()">Stop</button>
+
+<h1>Real SHA-256 Miner (Browser)</h1>
+
+<div class="grid">
+  <div class="card">
+    <div class="row"><span>Generation</span><span id="generation" class="big">0</span></div>
+    <div class="row"><span>Current Input</span><span id="currentInput" class="mono">—</span></div>
+    <div class="row"><span>Lowest Hash</span><span id="lowestHash" class="mono">—</span></div>
+    <div class="row"><span>Hashes / sec</span><span id="hps" class="mono">—</span></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label for="batch">Batch size (hashes per worker round)</label>
+      <input id="batch" type="number" min="1" step="1" value="256" />
+    </div>
+    <div class="row">
+      <div>
+        <button id="startBtn">Start</button>
+        <button id="stopBtn">Stop</button>
+      </div>
+      <div class="muted">Tip: start small (128–512). Larger batch = higher throughput.</div>
+    </div>
+    <div id="note" class="muted" style="margin-top:8px"></div>
+  </div>
+</div>
 
 <script>
-// --- Random hex generator ---
+/* ---------- DOM refs ---------- */
+const el = id => document.getElementById(id);
+const generationEl = el('generation');
+const currentInputEl = el('currentInput');
+const lowestHashEl = el('lowestHash');
+const hpsEl = el('hps');
+const startBtn = el('startBtn');
+const stopBtn = el('stopBtn');
+const batchInput = el('batch');
+const noteEl = el('note');
+
+/* ---------- Worker (inline via Blob) ---------- */
+const workerSrc = `
+let running = false;
+let counter = 0;
+let generation = 0;
+let lowestHash = null;
+let batchSize = 256;
+let hashCount = 0;
+let lastTime = performance.now();
+const enc = new TextEncoder();
+
 function cryptoRandomHex(len) {
   const arr = new Uint8Array(len / 2);
   crypto.getRandomValues(arr);
-  return Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(arr).map(b => b.toString(16).padStart(2,"0")).join("");
 }
 
-// --- Fake but realistic Bitcoin-like block header ---
-function fakeBlockHeader(counter) {
-  const version = "20000000"; // version
-  const prevHash = cryptoRandomHex(64); // prev block hash
-  const merkleRoot = cryptoRandomHex(64); // merkle root
-  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8,"0");
-  const bits = "1d00ffff"; // difficulty (testnet style)
-  const nonce = counter.toString(16).padStart(8,"0"); // increments
+function fakeBlockHeader(counter){
+  const version = "20000000";
+  const prevHash = cryptoRandomHex(64);
+  const merkleRoot = cryptoRandomHex(64);
+  const timestamp = Math.floor(Date.now()/1000).toString(16).padStart(8,"0");
+  const bits = "1d00ffff";
+  const nonce = counter.toString(16).padStart(8,"0");
   return version + prevHash + merkleRoot + timestamp + bits + nonce;
 }
 
-let running = false;
-let generation = 0;
-let lowestHash = null;
-let counter = 0;
-let loop;
-let hashCount = 0;
-let lastTime = performance.now();
-
-async function sha256hex(str) {
-  const buf = new TextEncoder().encode(str);
-  const hash = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2,"0")).join("");
+function toHex(buf){
+  const v = new Uint8Array(buf);
+  let s = '';
+  for(let i=0;i<v.length;i++){ s += v[i].toString(16).padStart(2,'0'); }
+  return s;
 }
 
-async function mineBatch() {
-  const batchSize = 200;
-  for (let i=0; i<batchSize; i++) {
-    const input = fakeBlockHeader(counter++);
-    const hash = await sha256hex(input);
-
-    if (!lowestHash || hash < lowestHash) {
-      lowestHash = hash;
-      document.getElementById("hash").innerText = "Lowest Hash: " + lowestHash;
-      document.getElementById("input").innerText = "Current Input: " + input;
-    }
-    generation++;
-    hashCount++;
+async function mineRound(){
+  const t0 = performance.now();
+  const inputs = new Array(batchSize);
+  for(let i=0;i<batchSize;i++){ inputs[i] = fakeBlockHeader(counter++); }
+  const promises = inputs.map(str => crypto.subtle.digest('SHA-256', enc.encode(str)));
+  const results = await Promise.all(promises);
+  for(let i=0;i<results.length;i++){
+    const hex = toHex(results[i]);
+    if(!lowestHash || hex < lowestHash){ lowestHash = hex; currentInput = inputs[i]; }
   }
-
-  document.getElementById("gen").innerText = "Generation: " + generation;
-
-  // Update hashes/sec every second
+  generation += batchSize;
+  hashCount += batchSize;
+  const t1 = performance.now();
+  // send progress every batch
   const now = performance.now();
-  if (now - lastTime >= 1000) {
-    document.getElementById("hps").innerText = "Hashes/sec: " + hashCount.toLocaleString();
-    hashCount = 0;
-    lastTime = now;
-  }
+  let hps = hashCount / ((now - lastTime)/1000);
+  lastTime = now;
+  hashCount = 0;
+  postMessage({
+    type:'progress',
+    generation,
+    currentInput,
+    lowestHash,
+    hps
+  });
+}
 
-  if (running) {
-    loop = requestAnimationFrame(mineBatch);
+async function loop(){
+  while(running){
+    try{ await mineRound(); }catch(e){ postMessage({type:'error',message:String(e)}); running=false; break; }
+    await new Promise(requestAnimationFrame);
   }
 }
 
-function startMiner() {
-  if (!running) {
+onmessage = (ev)=>{
+  const { cmd } = ev.data || {};
+  if(cmd === 'start'){
+    batchSize = Math.max(1, ev.data.batchSize|0);
+    if(!self.crypto || !crypto.subtle){ postMessage({type:'error', message:'SubtleCrypto not available.'}); return; }
+    if(running) return;
     running = true;
-    loop = requestAnimationFrame(mineBatch);
-  }
-}
+    loop();
+  }else if(cmd==='stop'){ running=false; }
+  else if(cmd==='setBatch'){ batchSize = Math.max(1, ev.data.batchSize|0); }
+};
+`;
 
-function stopMiner() {
-  running = false;
-  cancelAnimationFrame(loop);
+const worker = new Worker(URL.createObjectURL(new Blob([workerSrc], {type:'text/javascript'})));
+
+/* ---------- UI wiring ---------- */
+let latest = { generation:0, currentInput:'—', lowestHash:'—', hps:0 };
+function refreshUI(){
+  generationEl.textContent = latest.generation.toLocaleString();
+  currentInputEl.textContent = latest.currentInput;
+  lowestHashEl.textContent = latest.lowestHash;
+  hpsEl.textContent = latest.hps ? Math.round(latest.hps).toLocaleString()+' h/s' : '—';
+  requestAnimationFrame(refreshUI);
 }
+refreshUI();
+
+worker.onmessage = ev => {
+  const msg = ev.data;
+  if(msg.type==='progress'){
+    latest.generation = msg.generation;
+    latest.currentInput = msg.currentInput;
+    latest.lowestHash = msg.lowestHash;
+    latest.hps = msg.hps;
+  }else if(msg.type==='error'){
+    noteEl.innerHTML = '<span class="err">Error: '+msg.message+'</span>';
+  }
+};
+
+startBtn.onclick = ()=>{
+  const bs = parseInt(batchInput.value,10);
+  noteEl.textContent='';
+  worker.postMessage({cmd:'setBatch', batchSize:bs});
+  worker.postMessage({cmd:'start', batchSize:bs});
+};
+stopBtn.onclick = ()=>{ worker.postMessage({cmd:'stop'}); };
 </script>
 </body>
 </html>
