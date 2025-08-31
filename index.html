@@ -70,9 +70,10 @@ let running = false;
 let counter = 0;
 let generation = 0;
 let lowestHash = null;
+let currentInput = '—';
 let batchSize = 256;
 let hashCount = 0;
-let lastTime = performance.now();
+let lastUpdate = performance.now();
 const enc = new TextEncoder();
 
 function cryptoRandomHex(len) {
@@ -99,30 +100,32 @@ function toHex(buf){
 }
 
 async function mineRound(){
-  const t0 = performance.now();
   const inputs = new Array(batchSize);
   for(let i=0;i<batchSize;i++){ inputs[i] = fakeBlockHeader(counter++); }
+
   const promises = inputs.map(str => crypto.subtle.digest('SHA-256', enc.encode(str)));
   const results = await Promise.all(promises);
+
   for(let i=0;i<results.length;i++){
     const hex = toHex(results[i]);
-    if(!lowestHash || hex < lowestHash){ lowestHash = hex; currentInput = inputs[i]; }
+    currentInput = inputs[i];
+    if(!lowestHash || hex < lowestHash){ lowestHash = hex; }
+    generation++;
+    hashCount++;
   }
-  generation += batchSize;
-  hashCount += batchSize;
-  const t1 = performance.now();
-  // send progress every batch
+
   const now = performance.now();
-  let hps = hashCount / ((now - lastTime)/1000);
-  lastTime = now;
-  hashCount = 0;
-  postMessage({
-    type:'progress',
-    generation,
-    currentInput,
-    lowestHash,
-    hps
-  });
+  if(now - lastUpdate >= 10){ // update every 0.01 sec
+    postMessage({
+      type:'progress',
+      generation,
+      currentInput,
+      lowestHash,
+      hps: hashCount / ((now - lastUpdate)/1000)
+    });
+    hashCount = 0;
+    lastUpdate = now;
+  }
 }
 
 async function loop(){
