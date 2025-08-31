@@ -2,41 +2,57 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Safe Real-Time Miner</title>
+  <title>Mining Dashboard</title>
   <style>
     body {
-      background: #000;
-      color: #0f0;
-      font-family: monospace;
+      background: #0a0f1c;
+      color: #e0e6f0;
+      font-family: Consolas, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       padding: 20px;
     }
     h1 {
-      color: #0f0;
+      color: #4db8ff;
     }
-    .section {
-      margin-top: 15px;
+    .box {
+      background: #111a2e;
+      padding: 15px 20px;
+      margin: 10px;
+      border-radius: 8px;
+      width: 420px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .label {
+      color: #6ca0dc;
+    }
+    .value {
+      color: #ffffff;
+    }
+    #hashrate {
+      font-weight: bold;
+      font-size: 1.2em;
+      color: #4db8ff;
     }
   </style>
 </head>
 <body>
-  <h1>Safe Real-Time Miner</h1>
-  <div class="section">
-    <div>Generation: <span id="gen">0</span></div>
-    <div>Current Input: <span id="input">—</span></div>
-    <div>Current Hash: <span id="hash">—</span></div>
-    <div>Lowest Hash: <span id="lowest">—</span></div>
+  <h1>Mining Dashboard</h1>
+
+  <div class="box">
+    <div><span class="label">Generation:</span> <span class="value" id="gen">0</span></div>
+    <div><span class="label">Current Input:</span> <span class="value" id="input">—</span></div>
+    <div><span class="label">Current Hash:</span> <span class="value" id="hash">—</span></div>
+    <div><span class="label">Lowest Hash:</span> <span class="value" id="lowest">—</span></div>
   </div>
-  <div class="section">
-    <h2>System Stats</h2>
-    <div>CPU Cores: <span id="cores">—</span></div>
-    <div>CPU Usage: <span id="cpu">—</span></div>
-    <div>GPU Activity: <span id="gpu">—</span></div>
-    <div>RAM Used: <span id="ram">— MB</span></div>
-    <div>Estimated Power: <span id="power">— W</span></div>
+
+  <div class="box">
+    <div><span class="label">Hashrate:</span> <span id="hashrate">— H/s</span></div>
   </div>
 
   <script>
-    // Random input generator (random hex string)
+    // Generate a random hex input
     function randomInput(len = 12) {
       const chars = "abcdef0123456789";
       let str = "";
@@ -46,7 +62,7 @@
       return str;
     }
 
-    // SHA-256 hashing using Web Crypto API
+    // SHA-256 hashing
     async function sha256(msg) {
       const data = new TextEncoder().encode(msg);
       const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -55,9 +71,10 @@
         .join("");
     }
 
-    // Miner loop
     let generation = 0;
     let lowestHash = null;
+    let lastUpdate = performance.now();
+    let hashes = 0;
 
     async function mine() {
       generation++;
@@ -74,14 +91,15 @@
         document.getElementById("lowest").textContent = lowestHash;
       }
 
-      // Fake system stats for looks
-      document.getElementById("cores").textContent = navigator.hardwareConcurrency || "—";
-      document.getElementById("cpu").textContent = (Math.random() * 50 + 10).toFixed(1) + "%";
-      document.getElementById("gpu").textContent = (Math.random() * 500 + 50).toFixed(1) + " kH/s";
-      document.getElementById("ram").textContent = (Math.random() * 2000 + 500).toFixed(0) + " MB";
-      document.getElementById("power").textContent = (Math.random() * 100 + 50).toFixed(1) + " W";
+      hashes++;
+      let now = performance.now();
+      if (now - lastUpdate >= 1000) {
+        document.getElementById("hashrate").textContent = hashes + " H/s";
+        hashes = 0;
+        lastUpdate = now;
+      }
 
-      setTimeout(mine, 200); // keep looping
+      setTimeout(mine, 50); // keep mining
     }
 
     mine();
